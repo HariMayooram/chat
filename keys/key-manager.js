@@ -39,9 +39,10 @@
     location.port === '8888'
   );
 
-  var PUBLIC_KEY_URL = USE_APP_API
+  var DEFAULT_PUBLIC_KEY_URL = USE_APP_API
     ? '/api/public-key'
     : null; // Not available when served from the Python static server
+  var PUBLIC_KEY_URL = DEFAULT_PUBLIC_KEY_URL;
 
   var _cachedServerPublicKey = null;
 
@@ -85,13 +86,15 @@
 
   // ── Server keys (.env) ──────────────────────────────────────────────────────
 
-  var SERVER_KEYS_URL = USE_APP_API
+  var DEFAULT_SERVER_KEYS_URL = USE_APP_API
     ? '/api/server-keys'
     : 'http://localhost:8081/api/config/current';
+  var SERVER_KEYS_URL = DEFAULT_SERVER_KEYS_URL;
 
-  var VALIDATE_KEY_URL = USE_APP_API
+  var DEFAULT_VALIDATE_KEY_URL = USE_APP_API
     ? '/api/validate-key'
     : null;
+  var VALIDATE_KEY_URL = DEFAULT_VALIDATE_KEY_URL;
 
   var _serverKeys = new Set();
   var _validatedKeys = new Set();
@@ -399,6 +402,9 @@
   function init(containerEl, options) {
     if (!containerEl) return;
     options = options || {};
+    SERVER_KEYS_URL = options.serverKeysUrl || DEFAULT_SERVER_KEYS_URL;
+    PUBLIC_KEY_URL = options.publicKeyUrl || DEFAULT_PUBLIC_KEY_URL;
+    VALIDATE_KEY_URL = options.validateKeyUrl || DEFAULT_VALIDATE_KEY_URL;
 
     // Run crypto init and server key fetch in parallel; render once both settle.
     Promise.all([
@@ -413,6 +419,10 @@
     var providers = (window.KeyManagerProviders || []);
     containerEl.innerHTML = '';
     containerEl.className = (containerEl.className + ' key-widget').trim();
+
+    if (_shouldShowGeminiStarterNotice(providers, options)) {
+      containerEl.appendChild(buildGeminiStarterNotice());
+    }
 
     var list = document.createElement('div');
     list.className = 'key-provider-list';
@@ -438,6 +448,29 @@
       ' When you send a message, the key is briefly decrypted in memory and sent over HTTPS to the server, which passes it directly to the AI provider.' +
       ' HTTPS prevents network interception, but code already running on this page (e.g. a malicious extension or XSS) could in theory read the key from memory at that moment.';
     containerEl.appendChild(notice);
+  }
+
+  function _shouldShowGeminiStarterNotice(providers, options) {
+    if (options && options.showGeminiStarterNotice === false) {
+      return false;
+    }
+
+    var excludedProviders = new Set(['pinecone', 'voyage']);
+    return !providers.some(function (provider) {
+      if (excludedProviders.has(provider.id)) return false;
+      return hasKey(provider.id) || _serverKeys.has(provider.id);
+    });
+  }
+
+  function buildGeminiStarterNotice() {
+    var notice = document.createElement('div');
+    notice.className = 'key-notice';
+    notice.innerHTML =
+      ICON_INFO +
+      ' Start with a free Google Gemini key from ' +
+      '<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>' +
+      '. Add that key first when no other model keys are set.';
+    return notice;
   }
 
   function buildProviderCard(provider) {
