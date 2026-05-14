@@ -1,30 +1,29 @@
 /**
- * Middleware for Supabase Authentication and Route Protection
+ * Middleware for BetterAuth Authentication and Route Protection
  *
  * This middleware handles:
  * 1. Public routes - accessible without authentication (/, /login, /register)
  * 2. Protected routes - require authentication (chat, API endpoints)
  * 3. Admin routes - require admin role (/admin/*)
  * 4. Proper redirects for unauthorized access attempts
- * 5. Session validation using Supabase Auth
+ * 5. Session detection via BetterAuth session cookie (Edge-compatible, no Node.js imports)
  *
  * Route Protection Logic:
  * - Unauthenticated users: redirected to /login (except public routes)
  * - Authenticated users on auth pages: redirected to / or redirectTo param
- * - Non-admin users on admin routes: redirected to /
+ * - Non-admin users on admin routes: redirected by server components (not middleware)
  * - Admin users: full access to all routes
  * - Regular users: access to all non-admin routes
  */
 
-import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  ErrorCategory,
-  ErrorSeverity,
-  logPermissionError,
-  logSystemError,
-} from "@/lib/errors/logger";
 import { isRepoWikiPath } from "@/lib/repo-wiki";
+
+// BetterAuth session cookie name. Must match the basePath in betterauth/auth.ts.
+// The middleware only checks cookie presence — full session validation happens
+// in server components via auth.api.getSession(). Admin role enforcement is
+// also handled server-side; the middleware only redirects unauthenticated users.
+const SESSION_COOKIE = "better-auth.session_token";
 
 // Route configuration
 const PUBLIC_ROUTES = [
@@ -97,15 +96,6 @@ function isProtectedRoute(pathname: string): boolean {
   return !isPublicRoute(pathname) && !isAdminRoute(pathname);
 }
 
-/**
- * Extract user role from Supabase user object
- * @param user - The Supabase user object
- * @returns 'admin' if user has admin role, 'user' otherwise
- */
-function getUserRole(user: any): "admin" | "user" {
-  return user?.user_metadata?.role === "admin" ? "admin" : "user";
-}
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -115,16 +105,6 @@ export async function proxy(request: NextRequest) {
    */
   if (pathname.startsWith("/ping")) {
     return new Response("pong", { status: 200 });
-  }
-
-  // If Supabase is not configured, bypass auth entirely so the app loads in
-  // environments without Supabase credentials (key manager, settings, etc.
-  // remain usable; DB-backed features like chat history will error naturally).
-  if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  ) {
-    return NextResponse.next();
   }
 
   // Honor REQUIRE_AUTH (and host-based default) to decide whether the
@@ -157,7 +137,7 @@ export async function proxy(request: NextRequest) {
 
   // Skip middleware for system routes and static files
   if (
-    pathname.startsWith("/api/auth") || // Supabase auth endpoints
+    pathname.startsWith("/api/auth") || // BetterAuth auth endpoints
     pathname.startsWith("/_next") || // Next.js internal files
     pathname.startsWith("/favicon.ico") || // Favicon
     pathname.startsWith("/sitemap.xml") || // SEO files
@@ -171,84 +151,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Create Supabase client for middleware
   const response = NextResponse.next();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
-
-  // Get user from Supabase for middleware authentication
-  // Using getUser() instead of getSession() for better security as recommended by Supabase
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  // Handle session validation errors
-  if (error) {
-    // "Auth session missing" means no session cookie — treat as unauthenticated,
-    // not as a validation failure, so we fall through to normal unauth logic below.
-    const isSessionMissing =
-      error.name === "AuthSessionMissingError" ||
-      error.message?.includes("Auth session missing");
-
-    if (!isSessionMissing) {
-      // Only log and surface real validation errors on protected routes
-      const requiresAuth = !isPublicRoute(pathname);
-
-      if (requiresAuth) {
-        console.error(
-          `Middleware session validation error on protected route ${pathname}:`,
-          error.message || error
-        );
-
-        await logSystemError(
-          ErrorCategory.SESSION_EXPIRED,
-          `Middleware session validation failed on protected route: ${error.message}`,
-          {
-            pathname,
-            error: error.message,
-            userAgent: request.headers.get("user-agent"),
-            ip:
-              request.headers.get("x-forwarded-for") ||
-              request.headers.get("x-real-ip") ||
-              "unknown",
-            timestamp: new Date().toISOString(),
-          },
-          ErrorSeverity.WARNING
-        );
-
-        const redirectUrl = encodeURIComponent(pathname);
-        return NextResponse.redirect(
-          new URL(
-            `/login?redirectTo=${redirectUrl}&error=session_error`,
-            request.url
-          )
-        );
-      }
-
-      // Public route with non-missing error — allow through silently
-      return response;
-    }
-    // Session missing: fall through with user === null
-  }
-
-  // Check if user is authenticated
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!request.cookies.get(SESSION_COOKIE);
 
   // Handle unauthenticated users
   if (!isAuthenticated) {
@@ -269,9 +173,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Handle authenticated users
-  const userRole = getUserRole(user);
-
   // Redirect authenticated users away from auth pages to prevent confusion
   if (pathname === "/login" || pathname === "/register") {
     // Check if there's a redirectTo parameter to honor after login
@@ -283,35 +184,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/chat", request.url));
   }
 
-  // Check admin route access
-  if (isAdminRoute(pathname)) {
-    if (userRole !== "admin") {
-      // Log unauthorized admin access attempt
-      await logPermissionError(
-        ErrorCategory.PERMISSION_DENIED,
-        `Non-admin user attempted to access admin route: ${pathname}`,
-        {
-          pathname,
-          userRole,
-          userId: user.id,
-          userEmail: user.email,
-          userAgent: request.headers.get("user-agent"),
-          ip:
-            request.headers.get("x-forwarded-for") ||
-            request.headers.get("x-real-ip") ||
-            "unknown",
-          timestamp: new Date().toISOString(),
-        },
-        user.id,
-        ErrorSeverity.WARNING
-      );
-
-      // Non-admin users trying to access admin routes get redirected to home
-      // This prevents privilege escalation attempts
-      return NextResponse.redirect(new URL("/", request.url));
-    }
-    // Admin users are allowed to proceed to admin routes
-  }
+  // Admin role enforcement is handled by server components (requireAdmin/requireAdminWithRedirect).
+  // The middleware only ensures the user is authenticated before reaching admin routes.
 
   // Protected routes are accessible to all authenticated users
   // (both admin and regular users can access chat, API endpoints, etc.)
@@ -324,7 +198,7 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api/auth (Supabase auth endpoints - handled by Supabase)
+     * - api/auth (BetterAuth endpoints - handled by BetterAuth)
      * - _next/static (static files - no auth needed)
      * - _next/image (image optimization files - no auth needed)
      * - favicon.ico, sitemap.xml, robots.txt (metadata files - no auth needed)

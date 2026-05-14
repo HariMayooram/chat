@@ -9,7 +9,7 @@
 
 "use client";
 
-import type { Session, User } from "@supabase/supabase-js";
+import type { Session, User } from "./types";
 import type { SignUpEmailStatus, UserMetadata } from "./client";
 import {
   useRequireAdmin as contextRequireAdmin,

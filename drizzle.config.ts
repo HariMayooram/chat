@@ -8,6 +8,6 @@ export default {
   dialect: "postgresql",
   dbCredentials: {
     // biome-ignore lint: Forbidden non-null assertion.
-    url: process.env.POSTGRES_URL!,
+    url: process.env.POSTGRES_ADMIN_URL!,
   },
 };

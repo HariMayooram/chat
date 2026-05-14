@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 // Import simple chat agent resolver
 import { ChatAgentResolver } from "@/lib/ai/chat-agent-resolver";
 import { buildRagContext } from "@/lib/ai/rag-context-builder";

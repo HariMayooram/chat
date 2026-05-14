@@ -9,6 +9,7 @@ const nextConfig = {
     // experimental: {
     //   ppr: true,
     // },
+    serverExternalPackages: ['drizzle-orm', 'postgres'],
     turbopack: { root: __dirname },
     images: {
         remotePatterns: [

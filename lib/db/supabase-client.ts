@@ -1,10 +1,12 @@
 /**
  * Supabase Client Utilities
  *
- * This file provides Supabase client instances for different contexts:
- * - Server-side (with service role key for admin operations)
- * - Client-side (with anon key for regular operations)
- * - Server Components (with cookies for SSR)
+ * This file provides Supabase client instances for database access only.
+ * Auth is now handled by BetterAuth (see betterauth/auth.ts and lib/auth/server.ts).
+ *
+ * - createClient: Browser client for client-side DB queries
+ * - createServerComponentClient: Server client with cookies for SSR DB queries
+ * - createAdminClient: Service-role client for admin DB operations
  */
 
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
@@ -27,7 +29,7 @@ function validateEnvVars() {
 
 /**
  * Browser Client
- * Use this in Client Components
+ * Use this in Client Components for database queries (not auth).
  *
  * @example
  * 'use client'
@@ -35,7 +37,7 @@ function validateEnvVars() {
  *
  * export function MyComponent() {
  *   const supabase = createClient()
- *   // ... use supabase
+ *   // ... use supabase for DB queries
  * }
  */
 export function createClient() {
@@ -45,13 +47,13 @@ export function createClient() {
 
 /**
  * Server Client (with cookies)
- * Use this in Server Components, Server Actions, and Route Handlers
+ * Use this in Server Components, Server Actions, and Route Handlers for DB queries.
  *
  * @example
- * import { createServerClient } from '@/lib/db/supabase-client'
+ * import { createServerComponentClient } from '@/lib/db/supabase-client'
  *
  * export async function MyServerComponent() {
- *   const supabase = await createServerClient()
+ *   const supabase = await createServerComponentClient()
  *   const { data, error } = await supabase.from('chat').select()
  *   // ...
  * }
@@ -85,13 +87,13 @@ export async function createServerComponentClient() {
 
 /**
  * Server Admin Client (with service role key)
- * Use this for admin operations that bypass RLS
+ * Use this for admin DB operations that bypass RLS.
  * ⚠️ WARNING: This client has full database access. Use with caution!
  *
  * @example
  * import { createAdminClient } from '@/lib/db/supabase-client'
  *
- * export async function deleteUser(userId: string) {
+ * export async function deleteUserData(userId: string) {
  *   const supabase = createAdminClient()
  *   // This bypasses RLS
  *   await supabase.from('chat').delete().eq('user_id', userId)
@@ -111,51 +113,4 @@ export function createAdminClient() {
       autoRefreshToken: false,
     },
   });
-}
-
-/**
- * Get current user from server
- * Use this in Server Components to get the authenticated user
- *
- * @example
- * import { getCurrentUser } from '@/lib/db/supabase-client'
- *
- * export async function MyServerComponent() {
- *   const user = await getCurrentUser()
- *   if (!user) return <LoginPrompt />
- *   // ...
- * }
- */
-export async function getCurrentUser() {
-  const supabase = await createServerComponentClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
-}
-
-/**
- * Get current user's role from metadata
- * Returns 'admin' or 'user'
- *
- * @example
- * import { getUserRole } from '@/lib/db/supabase-client'
- *
- * export async function MyServerComponent() {
- *   const role = await getUserRole()
- *   if (role !== 'admin') return <AccessDenied />
- *   // ...
- * }
- */
-export async function getUserRole(): Promise<"admin" | "user"> {
-  const user = await getCurrentUser();
-  return user?.user_metadata?.role === "admin" ? "admin" : "user";
-}
-
-/**
- * Check if current user is admin
- */
-export async function isAdmin(): Promise<boolean> {
-  const role = await getUserRole();
-  return role === "admin";
 }

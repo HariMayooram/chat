@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createGoogleGenerativeAI, google } from "@ai-sdk/google";
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import type { UIMessageStreamWriter } from "ai";
 import { streamText } from "ai";
 import { saveDocument } from "@/lib/db/queries";

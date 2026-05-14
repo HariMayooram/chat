@@ -143,8 +143,6 @@ function LoginForm() {
         undefined,
         ErrorSeverity.ERROR
       );
-
-      console.error("Login error:", err);
     }
   };
 

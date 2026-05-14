@@ -1,6 +1,6 @@
 "use client";
 
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { ChevronUp, LogOut, Moon, Settings, Shield, Sun } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";

@@ -5,7 +5,7 @@
  * It logs errors to the database with proper categorization and context information.
  */
 
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 
 // Error types for classification
 export enum ErrorType {

@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { createAuthErrorResponse, requireAdmin } from "@/lib/auth/server";
 import { purgeOldActivityLogs } from "@/lib/db/queries/admin";
 import { ChatSDKError } from "@/lib/errors";

@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { requireAuth } from "@/lib/auth/server";
 import { getAdminConfigSummary } from "@/lib/db/queries/admin";
 import {

@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import type { NextRequest } from "next/server";
 import { createAuthErrorResponse, requireAdmin } from "@/lib/auth/server";
 import { setModelAsDefault } from "@/lib/db/queries/model-config";

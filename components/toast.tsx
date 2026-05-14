@@ -1,4 +1,5 @@
-// Simple toast implementation for the admin forms
+import { toast as sonnerToast } from "sonner";
+
 export function toast({
   type,
   description,
@@ -6,11 +7,8 @@ export function toast({
   type: "success" | "error" | "info";
   description: string;
 }) {
-  // For now, just use console.log - in a real app this would show a toast notification
-  console.log(`[${type.toUpperCase()}] ${description}`);
-
-  // You could implement a proper toast system here using libraries like:
-  // - react-hot-toast
-  // - sonner
-  // - or a custom toast context
+  const id = `${type}:${description}`;
+  if (type === "error") sonnerToast.error(description, { id });
+  else if (type === "success") sonnerToast.success(description, { id });
+  else sonnerToast(description, { id });
 }
